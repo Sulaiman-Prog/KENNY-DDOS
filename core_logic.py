@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from scipy.stats import entropy
 import logging
-import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
@@ -96,12 +95,8 @@ def train_hybrid_system(df, top_features):
     
     # Visualizing Confusion Matrix for the project defense
     cm = confusion_matrix(y_test, predictions)
-    plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('DDoS Detection Confusion Matrix')
-    plt.ylabel('Actual')
-    plt.xlabel('Predicted')
-    plt.show()
+    
 
     return mlp, scaler
 
@@ -120,10 +115,7 @@ if __name__ == "__main__":
         top_cols, importance_df = perform_feature_selection(data)
         
         # Visualize Feature Importance
-        plt.figure(figsize=(10, 6))
         sns.barplot(x='Importance', y='Feature', data=importance_df.head(15))
-        plt.title('Top 15 Features (Random Forest Analysis)')
-        plt.show()
 
         # Step 3 & 4: Hybrid MLP Training and Evaluation
         trained_model, data_scaler = train_hybrid_system(data, top_cols)
