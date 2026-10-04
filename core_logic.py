@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from scipy.stats import entropy
 import logging
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
@@ -95,7 +94,6 @@ def train_hybrid_system(df, top_features):
     
     # Visualizing Confusion Matrix for the project defense
     cm = confusion_matrix(y_test, predictions)
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
     
 
     return mlp, scaler
@@ -115,7 +113,6 @@ if __name__ == "__main__":
         top_cols, importance_df = perform_feature_selection(data)
         
         # Visualize Feature Importance
-        sns.barplot(x='Importance', y='Feature', data=importance_df.head(15))
 
         # Step 3 & 4: Hybrid MLP Training and Evaluation
         trained_model, data_scaler = train_hybrid_system(data, top_cols)
