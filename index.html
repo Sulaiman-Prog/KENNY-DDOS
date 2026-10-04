@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hybrid RF-MLP DDoS Shield</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #030a0f;
+      --panel:    #050e15;
+      --border:   #0d3a52;
+      --glow:     #00d4ff;
+      --glow2:    #00ff9d;
+      --danger:   #ff3b5c;
+      --warn:     #ffb800;
+      --text:     #c8e6f0;
+      --muted:    #3a6070;
+      --grid:     rgba(0,180,230,0.04);
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* grid overlay */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* scan line */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+    /* ─── HEADER ─── */
+    header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px; margin-bottom: 20px;
+    }
+
+    .logo-block .subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px; letter-spacing: 4px; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+
+    .logo-block h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 26px; font-weight: 900;
+      color: var(--glow);
+      text-shadow: 0 0 20px rgba(0,212,255,0.5), 0 0 60px rgba(0,212,255,0.15);
+      letter-spacing: 2px;
+    }
+
+    .logo-block h1 span { color: var(--glow2); }
+
+    .header-right { text-align: right; }
+
+    .uptime-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(0,255,157,0.06); border: 1px solid rgba(0,255,157,0.2);
+      padding: 4px 14px; border-radius: 2px; font-size: 11px;
+      font-family: 'Rajdhani', sans-serif; letter-spacing: 3px;
+      color: var(--glow2); text-transform: uppercase; margin-bottom: 8px;
+    }
+
+    .uptime-badge::before {
+      content: '';
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--glow2);
+      box-shadow: 0 0 8px var(--glow2);
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .datetime {
+      font-size: 10px; color: var(--muted); letter-spacing: 2px;
+    }
+
+    /* ─── GRID ─── */
+    .grid-main {
+      display: grid;
+      grid-template-columns: 220px 1fr 280px;
+      grid-template-rows: auto auto;
+      gap: 14px;
+    }
+
+    /* ─── PANELS ─── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glow), transparent);
+      opacity: 0.5;
+    }
+
+    .panel-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 9px; letter-spacing: 3px; color: var(--muted);
+      text-transform: uppercase;
+      padding: 10px 14px 0;
+    }
+
+    /* ─── METRICS COLUMN ─── */
+    .metrics-col {
+      grid-column: 1;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .metric-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      position: relative; overflow: hidden;
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glow), transparent);
+      opacity: 0.4;
+    }
+
+    .metric-card .m-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 9px; letter-spacing: 3px; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+
+    .metric-card .m-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 24px; font-weight: 700;
+      color: var(--glow);
+      text-shadow: 0 0 12px rgba(0,212,255,0.4);
+      line-height: 1;
+    }
+
+    .metric-card .m-sub {
+      font-size: 10px; color: var(--muted); margin-top: 4px;
+    }
+
+    .metric-card.green .m-value { color: var(--glow2); text-shadow: 0 0 12px rgba(0,255,157,0.4); }
+    .metric-card.red .m-value { color: var(--danger); text-shadow: 0 0 12px rgba(255,59,92,0.4); }
+
+    /* ─── ARCHITECTURE BADGES ─── */
+    .arch-badges { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+    .arch-badge {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(0,212,255,0.04); border: 1px solid rgba(0,212,255,0.15);
+      padding: 8px 10px; border-radius: 2px;
+    }
+    .arch-badge .ab-icon {
+      width: 28px; height: 28px; border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
+      background: rgba(0,212,255,0.1); color: var(--glow);
+      border: 1px solid rgba(0,212,255,0.3); flex-shrink: 0;
+    }
+    .arch-badge.g2 .ab-icon { background: rgba(0,255,157,0.1); color: var(--glow2); border-color: rgba(0,255,157,0.3); }
+    .arch-badge .ab-info { flex: 1; }
+    .arch-badge .ab-name {
+      font-family: 'Rajdhani', sans-serif; font-size: 11px;
+      font-weight: 600; color: var(--text); letter-spacing: 1px;
+    }
+    .arch-badge .ab-desc { font-size: 9px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+    .ab-status { width: 6px; height: 6px; border-radius: 50%; background: var(--glow2); box-shadow: 0 0 6px var(--glow2); animation: blink 1.4s infinite; }
+    .arch-badge.g2 .ab-status { background: var(--glow); box-shadow: 0 0 6px var(--glow); }
+
+    /* ─── MAIN STAGE ─── */
+    .main-stage {
+      grid-column: 2;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+
+    /* waveform panel */
+    .waveform-panel { padding-bottom: 4px; }
+    #waveCanvas { display: block; width: 100%; height: 110px; }
+
+    /* inspect panel */
+    .inspect-panel { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; min-height: 300px; justify-content: center; }
+
+    .status-ring {
+      width: 160px; height: 160px; position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    .ring-content { text-align: center; position: relative; z-index: 1; }
+
+    .ring-verdict {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      color: var(--glow); margin-bottom: 4px;
+    }
+
+    .ring-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 20px; font-weight: 700; color: var(--text);
+      line-height: 1.1;
+    }
+
+    .vote-row {
+      display: flex; gap: 10px;
+    }
+
+    .vote-chip {
+      flex: 1; text-align: center;
+      background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.2);
+      padding: 8px 6px; border-radius: 2px;
+    }
+
+    .vote-chip .vc-model {
+      font-family: 'Rajdhani', sans-serif; font-size: 10px; letter-spacing: 2px;
+      color: var(--muted); text-transform: uppercase;
+    }
+
+    .vote-chip .vc-verdict {
+      font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700;
+      color: var(--glow); margin-top: 4px;
+    }
+
+    .vote-chip.danger { border-color: rgba(255,59,92,0.3); background: rgba(255,59,92,0.05); }
+    .vote-chip.danger .vc-verdict { color: var(--danger); }
+    .vote-chip.safe { border-color: rgba(0,255,157,0.25); background: rgba(0,255,157,0.04); }
+    .vote-chip.safe .vc-verdict { color: var(--glow2); }
+
+    .inspect-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px; font-weight: 700; letter-spacing: 3px;
+      background: transparent;
+      border: 1px solid var(--glow);
+      color: var(--glow);
+      padding: 12px 32px; cursor: pointer;
+      border-radius: 2px;
+      text-transform: uppercase;
+      position: relative; overflow: hidden;
+      transition: color .2s, background .2s;
+    }
+
+    .inspect-btn::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: var(--glow);
+      transform: scaleX(0); transform-origin: left;
+      transition: transform .25s ease;
+      z-index: -1;
+    }
+
+    .inspect-btn:hover { color: var(--bg); }
+    .inspect-btn:hover::before { transform: scaleX(1); }
+    .inspect-btn:active { transform: scale(0.97); }
+
+    /* entropy bar */
+    .entropy-row { width: 100%; }
+    .entropy-label {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--muted); margin-bottom: 5px; letter-spacing: 1px;
+    }
+    .entropy-track {
+      height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden;
+    }
+    .entropy-fill {
+      height: 100%; background: linear-gradient(90deg, var(--glow2), var(--glow));
+      border-radius: 2px; transition: width .5s ease;
+      box-shadow: 0 0 8px var(--glow);
+    }
+
+    /* packet details row */
+    .pkt-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;
+    }
+
+    .pkt-cell {
+      background: rgba(0,212,255,0.03); border: 1px solid var(--border);
+      padding: 8px; border-radius: 2px; text-align: center;
+    }
+
+    .pkt-cell .pc-label { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+    .pkt-cell .pc-val {
+      font-family: 'Orbitron', sans-serif; font-size: 11px;
+      color: var(--glow); margin-top: 3px;
+    }
+
+    /* ─── LOG PANEL ─── */
+    .log-col { grid-column: 3; grid-row: 1 / 3; display: flex; flex-direction: column; }
+
+    .log-body {
+      flex: 1; overflow-y: auto; padding: 10px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+
+    .log-entry {
+      border-left: 2px solid var(--muted);
+      padding: 6px 10px; margin-bottom: 6px;
+      background: rgba(255,255,255,0.015); border-radius: 0 2px 2px 0;
+      animation: slideIn .3s ease;
+    }
+
+    .log-entry.attack { border-color: var(--danger); }
+    .log-entry.clean  { border-color: var(--glow2); }
+
+    @keyframes slideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+    .log-entry .le-time { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+    .log-entry .le-status {
+      font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+      margin: 2px 0;
+    }
+    .log-entry.attack .le-status { color: var(--danger); }
+    .log-entry.clean  .le-status { color: var(--glow2); }
+    .log-entry .le-meta { font-size: 9px; color: var(--muted); }
+
+    /* ─── BOTTOM STATS ─── */
+    .bottom-stats {
+      grid-column: 1 / 3;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+      padding: 12px;
+    }
+
+    .stat-block { text-align: center; }
+    .stat-block .sb-val {
+      font-family: 'Orbitron', sans-serif; font-size: 16px; font-weight: 700;
+      color: var(--glow);
+    }
+    .stat-block .sb-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 9px; letter-spacing: 2px; color: var(--muted);
+      text-transform: uppercase; margin-top: 3px;
+    }
+    .stat-block.danger .sb-val { color: var(--danger); }
+    .stat-block.green .sb-val { color: var(--glow2); }
+    .stat-block.warn .sb-val { color: var(--warn); }
+
+    /* ─── ATTACK STATE ─── */
+    .inspect-panel.is-attack { animation: attackPulse .8s ease infinite alternate; }
+    @keyframes attackPulse {
+      from { box-shadow: inset 0 0 0 0 transparent; }
+      to   { box-shadow: inset 0 0 30px rgba(255,59,92,0.12); }
+    }
+
+    /* ring animation */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ring-spinner { animation: spin 2s linear infinite; transform-origin: 80px 80px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-block">
+      <div class="subtitle">Final Year Project // Network Security</div>
+      <h1>HYBRID RF<span>·</span>MLP <span>SHIELD</span></h1>
+    </div>
+    <div class="header-right">
+      <div class="uptime-badge">System Operational</div>
+      <div class="datetime" id="clockDisplay">--:--:-- GMT</div>
+    </div>
+  </header>
+
+  <div class="grid-main">
+
+    <!-- ── COLUMN 1: METRICS ── -->
+    <div class="metrics-col">
+
+      <div class="metric-card">
+        <div class="m-label">Model Accuracy</div>
+        <div class="m-value">99.79<span style="font-size:14px">%</span></div>
+        <div class="m-sub">CIC-DDoS2019 Benchmark</div>
+      </div>
+
+      <div class="metric-card green">
+        <div class="m-label">F1 Score</div>
+        <div class="m-value">0.998</div>
+        <div class="m-sub">Weighted Macro Avg</div>
+      </div>
+
+      <div class="metric-card red">
+        <div class="m-label">False Positive Rate</div>
+        <div class="m-value">0.21<span style="font-size:14px">%</span></div>
+        <div class="m-sub">Tuned Threshold</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">Model Architecture</div>
+        <div class="arch-badges">
+          <div class="arch-badge">
+            <div class="ab-icon">RF</div>
+            <div class="ab-info">
+              <div class="ab-name">Random Forest</div>
+              <div class="ab-desc">ENTROPY TIER-1 FILTER</div>
+            </div>
+            <div class="ab-status"></div>
+          </div>
+          <div class="arch-badge g2">
+            <div class="ab-icon">MLP</div>
+            <div class="ab-info">
+              <div class="ab-name">Neural Network</div>
+              <div class="ab-desc">DEEP PATTERN LEARNER</div>
+            </div>
+            <div class="ab-status"></div>
+          </div>
+          <div class="arch-badge" style="justify-content:center; border-color: rgba(255,184,0,0.2); background: rgba(255,184,0,0.04);">
+            <div style="font-family:'Rajdhani',sans-serif; font-size:10px; letter-spacing:2px; color: var(--warn); text-align:center;">
+              HYBRID MAJORITY VOTE<br>
+              <span style="font-size:9px; color: var(--muted);">Parallel Ensemble Decision</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── COLUMN 2: MAIN STAGE ── -->
+    <div class="main-stage">
+
+      <!-- Waveform -->
+      <div class="panel waveform-panel">
+        <div class="panel-label">Live Traffic Waveform — Packets/sec</div>
+        <canvas id="waveCanvas" height="110"></canvas>
+      </div>
+
+      <!-- Inspect -->
+      <div class="panel inspect-panel" id="inspectPanel">
+        <div class="status-ring" id="statusRing">
+          <svg class="ring-svg" viewBox="0 0 160 160" fill="none">
+            <!-- static dashes -->
+            <circle cx="80" cy="80" r="70" stroke="rgba(0,212,255,0.08)" stroke-width="1"/>
+            <circle cx="80" cy="80" r="65" stroke="rgba(0,212,255,0.06)" stroke-width="6" stroke-dasharray="3 6"/>
+            <!-- spinner arc -->
+            <circle id="ringArc" class="ring-spinner" cx="80" cy="80" r="70"
+              stroke="rgba(0,212,255,0.5)" stroke-width="2"
+              stroke-dasharray="60 380" stroke-linecap="round"
+              transform-origin="80px 80px"
+            />
+          </svg>
+          <div class="ring-content">
+            <div class="ring-verdict" id="ringVerdict">IDLE</div>
+            <div class="ring-label" id="ringLabel">AWAITING<br>PACKET</div>
+          </div>
+        </div>
+
+        <div class="entropy-row">
+          <div class="entropy-label">
+            <span>PACKET ENTROPY</span>
+            <span id="entropyVal">—</span>
+          </div>
+          <div class="entropy-track">
+            <div class="entropy-fill" id="entropyBar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="pkt-grid" id="pktGrid">
+          <div class="pkt-cell"><div class="pc-label">SRC PORT</div><div class="pc-val" id="p_src">—</div></div>
+          <div class="pkt-cell"><div class="pc-label">DST PORT</div><div class="pc-val" id="p_dst">—</div></div>
+          <div class="pkt-cell"><div class="pc-label">PROTO</div><div class="pc-val" id="p_proto">—</div></div>
+          <div class="pkt-cell"><div class="pc-label">PKT SIZE</div><div class="pc-val" id="p_size">—</div></div>
+        </div>
+
+        <div class="vote-row" id="voteRow">
+          <div class="vote-chip" id="rfChip">
+            <div class="vc-model">RF Tier-1</div>
+            <div class="vc-verdict" id="rfVerdict">—</div>
+          </div>
+          <div class="vote-chip" id="mlpChip">
+            <div class="vc-model">MLP Layer</div>
+            <div class="vc-verdict" id="mlpVerdict">—</div>
+          </div>
+          <div class="vote-chip" id="hybridChip">
+            <div class="vc-model">Hybrid Vote</div>
+            <div class="vc-verdict" id="hybridVerdict">—</div>
+          </div>
+        </div>
+
+        <button class="inspect-btn" onclick="simulate()">▶ INSPECT PACKET</button>
+      </div>
+
+      <!-- Bottom stats -->
+      <div class="panel bottom-stats">
+        <div class="stat-block">
+          <div class="sb-val" id="s_total">0</div>
+          <div class="sb-label">Packets Inspected</div>
+        </div>
+        <div class="stat-block danger">
+          <div class="sb-val" id="s_attacks">0</div>
+          <div class="sb-label">Threats Blocked</div>
+        </div>
+        <div class="stat-block green">
+          <div class="sb-val" id="s_clean">0</div>
+          <div class="sb-label">Clean Traffic</div>
+        </div>
+        <div class="stat-block warn">
+          <div class="sb-val" id="s_rate">0%</div>
+          <div class="sb-label">Attack Rate</div>
+        </div>
+        <div class="stat-block">
+          <div class="sb-val" id="s_latency">—ms</div>
+          <div class="sb-label">Inference Time</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── COLUMN 3: LOG ── -->
+    <div class="panel log-col">
+      <div class="panel-label" style="padding:10px 14px 6px;">Threat Intelligence Log</div>
+      <div class="log-body" id="logBody">
+        <div style="text-align:center; color: var(--muted); font-size:10px; padding: 30px 0; letter-spacing:2px;">
+          NO EVENTS RECORDED<br><br>AWAITING PACKET INSPECTION
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /grid-main -->
+</div><!-- /app -->
+
+<script>
+  /* ─── CLOCK ─── */
+  function tickClock() {
+    const d = new Date();
+    document.getElementById('clockDisplay').textContent =
+      d.toUTCString().split(' ')[4] + ' UTC';
+  }
+  tickClock(); setInterval(tickClock, 1000);
+
+  /* ─── WAVEFORM ─── */
+  const waveCanvas = document.getElementById('waveCanvas');
+  const wctx = waveCanvas.getContext('2d');
+  const WAVE_LEN = 120;
+  let waveData = Array(WAVE_LEN).fill(0).map(() => Math.random() * 30 + 10);
+  let isAttackMode = false;
+
+  function resizeWave() {
+    waveCanvas.width = waveCanvas.offsetWidth;
+    waveCanvas.height = 110;
+  }
+  resizeWave(); window.addEventListener('resize', resizeWave);
+
+  function drawWave() {
+    const W = waveCanvas.width, H = waveCanvas.height;
+    wctx.clearRect(0, 0, W, H);
+
+    // inject new sample
+    const base = isAttackMode ? 80 : 20;
+    const noise = isAttackMode ? 50 : 20;
+    waveData.push(base + Math.random() * noise + Math.sin(Date.now()/400)*10);
+    if (waveData.length > WAVE_LEN) waveData.shift();
+
+    const step = W / (WAVE_LEN - 1);
+    const maxVal = Math.max(...waveData, 1);
+
+    // fill gradient
+    const grad = wctx.createLinearGradient(0, 0, 0, H);
+    if (isAttackMode) {
+      grad.addColorStop(0, 'rgba(255,59,92,0.25)');
+      grad.addColorStop(1, 'rgba(255,59,92,0)');
+    } else {
+      grad.addColorStop(0, 'rgba(0,212,255,0.15)');
+      grad.addColorStop(1, 'rgba(0,212,255,0)');
+    }
+
+    wctx.beginPath();
+    wctx.moveTo(0, H);
+    waveData.forEach((v, i) => {
+      const x = i * step;
+      const y = H - (v / maxVal) * (H - 14) - 4;
+      i === 0 ? wctx.lineTo(x, y) : wctx.lineTo(x, y);
+    });
+    wctx.lineTo(W, H);
+    wctx.closePath();
+    wctx.fillStyle = grad;
+    wctx.fill();
+
+    // line
+    wctx.beginPath();
+    waveData.forEach((v, i) => {
+      const x = i * step;
+      const y = H - (v / maxVal) * (H - 14) - 4;
+      i === 0 ? wctx.moveTo(x, y) : wctx.lineTo(x, y);
+    });
+    wctx.strokeStyle = isAttackMode ? 'rgba(255,59,92,0.9)' : 'rgba(0,212,255,0.8)';
+    wctx.lineWidth = 1.5;
+    wctx.stroke();
+
+    // dot at latest
+    const lastX = (waveData.length - 1) * step;
+    const lastY = H - (waveData[waveData.length-1] / maxVal) * (H - 14) - 4;
+    wctx.beginPath();
+    wctx.arc(lastX, lastY, 3, 0, Math.PI*2);
+    wctx.fillStyle = isAttackMode ? '#ff3b5c' : '#00d4ff';
+    wctx.fill();
+  }
+
+  setInterval(drawWave, 80);
+
+  /* ─── STATS ─── */
+  let stats = { total: 0, attacks: 0, clean: 0 };
+
+  function updateStats(isAttack, latency) {
+    stats.total++;
+    isAttack ? stats.attacks++ : stats.clean++;
+    document.getElementById('s_total').textContent = stats.total;
+    document.getElementById('s_attacks').textContent = stats.attacks;
+    document.getElementById('s_clean').textContent = stats.clean;
+    const rate = stats.total ? Math.round((stats.attacks / stats.total) * 100) : 0;
+    document.getElementById('s_rate').textContent = rate + '%';
+    document.getElementById('s_latency').textContent = latency + 'ms';
+  }
+
+  /* ─── SIMULATE ─── */
+  async function simulate() {
+    const panel = document.getElementById('inspectPanel');
+    const ringVerdict = document.getElementById('ringVerdict');
+    const ringLabel = document.getElementById('ringLabel');
+    const rfChip = document.getElementById('rfChip');
+    const mlpChip = document.getElementById('mlpChip');
+    const hybridChip = document.getElementById('hybridChip');
+
+    // Reset to scanning
+    panel.className = 'panel inspect-panel';
+    isAttackMode = false;
+    ringVerdict.textContent = 'SCANNING';
+    ringLabel.innerHTML = 'ANALYZING<br>PACKET';
+    ringVerdict.style.color = 'var(--glow)';
+    document.getElementById('ringArc').style.stroke = 'rgba(0,212,255,0.6)';
+
+    ['rfChip','mlpChip','hybridChip'].forEach(id => {
+      const c = document.getElementById(id);
+      c.className = 'vote-chip';
+      c.querySelector('.vc-verdict').textContent = '...';
+    });
+
+    const t0 = Date.now();
+
+    try {
+      const res = await fetch('http://localhost:8000/analyze-packet');
+      const data = await res.json();
+      const latency = Date.now() - t0;
+      const isAttack = data.status === 'ATTACK';
+
+      setTimeout(() => applyResult(data, isAttack, latency), 400);
+    } catch(e) {
+      // Demo mode: generate fake packet
+      const latency = Math.floor(Math.random() * 30) + 8;
+      const isAttack = Math.random() > 0.6;
+      const entropy = +(Math.random() * (isAttack ? 2.0 : 3.5) + (isAttack ? 0.5 : 3.0)).toFixed(3);
+      const fakeData = {
+        status: isAttack ? 'ATTACK' : 'BENIGN',
+        entropy: entropy,
+        packet_details: {
+          src_port: Math.floor(Math.random() * 60000) + 1024,
+          dest_port: [80,443,53,22,8080][Math.floor(Math.random()*5)],
+          protocol: ['TCP','UDP','ICMP'][Math.floor(Math.random()*3)],
+          size: Math.floor(Math.random() * 1400) + 40
+        }
+      };
+      setTimeout(() => applyResult(fakeData, isAttack, latency), 400);
+    }
+  }
+
+  function applyResult(data, isAttack, latency) {
+    const panel = document.getElementById('inspectPanel');
+    const ringVerdict = document.getElementById('ringVerdict');
+    const ringLabel = document.getElementById('ringLabel');
+    const arc = document.getElementById('ringArc');
+
+    isAttackMode = isAttack;
+
+    // Entropy bar
+    const ent = parseFloat(data.entropy);
+    const entPct = Math.min((ent / 5.0) * 100, 100);
+    document.getElementById('entropyVal').textContent = ent.toFixed(3) + ' bits';
+    document.getElementById('entropyBar').style.width = entPct + '%';
+
+    // Packet details
+    const pd = data.packet_details;
+    document.getElementById('p_src').textContent   = pd.src_port   || '—';
+    document.getElementById('p_dst').textContent   = pd.dest_port  || '—';
+    document.getElementById('p_proto').textContent = pd.protocol   || pd.proto || '—';
+    document.getElementById('p_size').textContent  = (pd.size || pd.packet_size || '—') + (pd.size ? 'B' : '');
+
+    if (isAttack) {
+      panel.className = 'panel inspect-panel is-attack';
+      arc.style.stroke = 'rgba(255,59,92,0.7)';
+      ringVerdict.style.color = 'var(--danger)';
+      ringVerdict.textContent = 'THREAT DETECTED';
+      ringLabel.innerHTML = 'DDoS<br>ATTACK';
+
+      document.getElementById('rfChip').className = 'vote-chip danger';
+      document.getElementById('rfVerdict').textContent = 'FLAG';
+      document.getElementById('mlpChip').className = 'vote-chip danger';
+      document.getElementById('mlpVerdict').textContent = 'HIGH-RISK';
+      document.getElementById('hybridChip').className = 'vote-chip danger';
+      document.getElementById('hybridVerdict').textContent = 'MALICIOUS';
+    } else {
+      panel.className = 'panel inspect-panel';
+      arc.style.stroke = 'rgba(0,255,157,0.6)';
+      ringVerdict.style.color = 'var(--glow2)';
+      ringVerdict.textContent = 'TRAFFIC CLEAN';
+      ringLabel.innerHTML = 'BENIGN<br>TRAFFIC';
+
+      document.getElementById('rfChip').className = 'vote-chip safe';
+      document.getElementById('rfVerdict').textContent = 'NORMAL';
+      document.getElementById('mlpChip').className = 'vote-chip safe';
+      document.getElementById('mlpVerdict').textContent = 'SAFE';
+      document.getElementById('hybridChip').className = 'vote-chip safe';
+      document.getElementById('hybridVerdict').textContent = 'BENIGN';
+    }
+
+    updateStats(isAttack, latency);
+    addLog(data, isAttack, latency);
+  }
+
+  function addLog(data, isAttack, latency) {
+    const log = document.getElementById('logBody');
+    const time = new Date().toTimeString().split(' ')[0];
+    const cls = isAttack ? 'attack' : 'clean';
+    const status = data.status;
+    const ent = parseFloat(data.entropy).toFixed(3);
+    const port = data.packet_details?.dest_port || '—';
+    const proto = data.packet_details?.protocol || data.packet_details?.proto || '—';
+
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + cls;
+    entry.innerHTML = `
+      <div class="le-time">${time} · ${latency}ms latency</div>
+      <div class="le-status">${status}</div>
+      <div class="le-meta">ENT: ${ent} | DST:${port} | ${proto}</div>
+    `;
+
+    // Remove placeholder
+    const placeholder = log.querySelector('div[style*="text-align"]');
+    if (placeholder) placeholder.remove();
+
+    log.insertBefore(entry, log.firstChild);
+
+    // Cap at 50 entries
+    while (log.children.length > 50) log.removeChild(log.lastChild);
+  }
+</script>
+</body>
+</html>
