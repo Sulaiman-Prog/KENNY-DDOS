@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import numpy as np
 from core_logic import train_hybrid_system, DDoSDetector # Using your logic
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
@@ -15,6 +16,11 @@ detector = DDoSDetector()
 data = detector.load_parquet_data("Syn-training.parquet", "Syn-testing.parquet")
 # Use the logic we built to get the model ready
 # (In a real app, we'd save/load a .pkl file here)
+
+@app.get("/")
+async def read_index():
+    return FileResponse("index.html")
+
 
 @app.get("/analyze-packet")
 async def analyze():
